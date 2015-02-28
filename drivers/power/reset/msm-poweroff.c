@@ -116,7 +116,11 @@ static bool scandump_test;
 module_param(scandump_test, bool, 0644);
 MODULE_PARM_DESC(scandump_test, "Set 1 to enable scandump test");
 
+#ifdef CONFIG_QCOM_PRESERVE_MEM
+static bool warm_reset = true;
+#else
 static bool warm_reset;
+#endif
 module_param(warm_reset, bool, 0644);
 MODULE_PARM_DESC(warm_reset, "Set 1 to override default cold-reset");
 
