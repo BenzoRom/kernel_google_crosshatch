@@ -1081,7 +1081,7 @@ ring_doorbell:
 
 #ifdef CONFIG_DEBUG_FS
 	cq_host->mrq_slot[tag]->issue_time_stamp = ktime_get();
-	cq_host->mrq_slot[tag]->complete_time_stamp = ktime_set(0, 0);
+	cq_host->mrq_slot[tag]->complete_time_stamp = 0;
 #endif
 
 	/* Ensure the task descriptor list is flushed before ringing doorbell */

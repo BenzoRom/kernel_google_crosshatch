@@ -406,7 +406,7 @@ static void input_handle_event(struct input_dev *dev,
 		 * monolithic one as we use its presence when deciding
 		 * whether to generate a synthetic timestamp.
 		 */
-		dev->timestamp[INPUT_CLK_MONO] = ktime_set(0, 0);
+		dev->timestamp[INPUT_CLK_MONO] = 0;
 	} else if (dev->num_vals >= dev->max_vals - 2) {
 		dev->vals[dev->num_vals++] = input_value_sync;
 		input_pass_values(dev, dev->vals, dev->num_vals);
@@ -1941,7 +1941,7 @@ EXPORT_SYMBOL(input_set_timestamp);
  */
 ktime_t *input_get_timestamp(struct input_dev *dev)
 {
-	const ktime_t invalid_timestamp = ktime_set(0, 0);
+	const ktime_t invalid_timestamp = 0;
 
 	if (!ktime_compare(dev->timestamp[INPUT_CLK_MONO], invalid_timestamp))
 		input_set_timestamp(dev, ktime_get());

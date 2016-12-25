@@ -1413,7 +1413,7 @@ static int wdsp_mgr_probe(struct platform_device *pdev)
 		dev_err(wdsp->mdev, "wakeup init failed: %d\n", ret);
 	}
 
-	wdsp->ktime_zero = ktime_set(0, 0);
+	wdsp->ktime_zero = 0;
 
 	if (sysfs_create_group(&mdev->kobj,
 				&wdsp_mgr_group))

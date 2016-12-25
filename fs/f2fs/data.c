@@ -106,7 +106,7 @@ static void __read_end_io(struct bio *bio)
 	}
 	if (bio->bi_private)
 		mempool_free(bio->bi_private, bio_post_read_ctx_pool);
-	if (bio->bi_alloc_ts.tv64)
+	if (bio->bi_alloc_ts)
 		mm_event_end(F2FS_READ_DATA, bio->bi_alloc_ts);
 	bio_put(bio);
 }
