@@ -3330,20 +3330,18 @@ void walt_irq_work(struct irq_work *irq_work)
 
 	for_each_sched_cluster(cluster) {
 		for_each_cpu(cpu, &cluster->cpus) {
-			int nflag = 0;
+			int flag = SCHED_CPUFREQ_WALT;
 
 			rq = cpu_rq(cpu);
 
 			if (is_migration) {
 				if (rq->notif_pending) {
-					nflag = SCHED_CPUFREQ_INTERCLUSTER_MIG;
+					flag |= SCHED_CPUFREQ_INTERCLUSTER_MIG;
 					rq->notif_pending = false;
-				} else {
-					nflag = SCHED_CPUFREQ_FORCE_UPDATE;
 				}
 			}
 
-			cpufreq_update_util(rq, nflag);
+			cpufreq_update_util(rq, flag);
 		}
 	}
 

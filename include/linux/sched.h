@@ -3963,14 +3963,13 @@ static inline unsigned long rlimit_max(unsigned int limit)
 	return task_rlimit_max(current, limit);
 }
 
-#define SCHED_CPUFREQ_RT	(1U << 0)
-#define SCHED_CPUFREQ_DL	(1U << 1)
-#define SCHED_CPUFREQ_IOWAIT	(1U << 2)
-#define SCHED_CPUFREQ_INTERCLUSTER_MIG (1U << 3)
-#define SCHED_CPUFREQ_RESERVED (1U << 4)
-#define SCHED_CPUFREQ_PL	(1U << 5)
-#define SCHED_CPUFREQ_EARLY_DET	(1U << 6)
-#define SCHED_CPUFREQ_FORCE_UPDATE (1U << 7)
+#define SCHED_CPUFREQ_RT		(1U << 0)
+#define SCHED_CPUFREQ_DL		(1U << 1)
+#define SCHED_CPUFREQ_IOWAIT		(1U << 2)
+#define SCHED_CPUFREQ_INTERCLUSTER_MIG	(1U << 3)
+#define SCHED_CPUFREQ_WALT		(1U << 4)
+#define SCHED_CPUFREQ_PL		(1U << 5)
+#define SCHED_CPUFREQ_EARLY_DET 	(1U << 6)
 
 #define SCHED_CPUFREQ_RT_DL	(SCHED_CPUFREQ_RT | SCHED_CPUFREQ_DL)
 
