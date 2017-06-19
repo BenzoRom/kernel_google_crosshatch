@@ -822,8 +822,7 @@ static ktime_t tick_nohz_stop_sched_tick(struct tick_sched *ts,
 	 * the scheduler tick in nohz_restart_sched_tick.
 	 */
 	if (!ts->tick_stopped) {
-		nohz_balance_enter_idle(cpu);
-		calc_load_enter_idle();
+		calc_load_nohz_start();
 		cpu_load_update_nohz_start();
 
 		ts->last_tick = hrtimer_get_expires(&ts->sched_timer);
@@ -871,7 +870,7 @@ static void tick_nohz_restart_sched_tick(struct tick_sched *ts, ktime_t now)
 	 */
 	timer_clear_idle();
 
-	calc_load_exit_idle();
+	calc_load_nohz_stop();
 	touch_softlockup_watchdog_sched();
 	/*
 	 * Cancel the scheduled timer and restore the tick
@@ -981,8 +980,10 @@ static void __tick_nohz_idle_enter(struct tick_sched *ts)
 			ts->idle_expires = expires;
 		}
 
-		if (!was_stopped && ts->tick_stopped)
+		if (!was_stopped && ts->tick_stopped) {
 			ts->idle_jiffies = ts->last_jiffies;
+			nohz_balance_enter_idle(cpu);
+		}
 	}
 }
 

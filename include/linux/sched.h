@@ -2791,11 +2791,11 @@ static inline void sched_update_cpu_freq_min_max(const cpumask_t *cpus,
 #endif /* CONFIG_SCHED_WALT */
 
 #ifdef CONFIG_NO_HZ_COMMON
-void calc_load_enter_idle(void);
-void calc_load_exit_idle(void);
+void calc_load_nohz_start(void);
+void calc_load_nohz_stop(void);
 #else
-static inline void calc_load_enter_idle(void) { }
-static inline void calc_load_exit_idle(void) { }
+static inline void calc_load_nohz_start(void) { }
+static inline void calc_load_nohz_stop(void) { }
 #endif /* CONFIG_NO_HZ_COMMON */
 
 static inline void set_wake_up_idle(bool enabled)
