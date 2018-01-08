@@ -295,6 +295,8 @@ module_param_named(power_efficient, wq_power_efficient, bool, 0644);
 
 bool wq_online;				/* can kworkers be created yet? */
 
+bool wq_online;				/* can kworkers be created yet? */
+
 static bool wq_numa_enabled;		/* unbound NUMA affinity enabled */
 
 /* buf for wq_update_unbound_numa_attrs(), protected by CPU hotplug exclusion */
@@ -2276,7 +2278,7 @@ sleep:
 	 * event.
 	 */
 	worker_enter_idle(worker);
-	__set_current_state(TASK_INTERRUPTIBLE);
+	__set_current_state(TASK_IDLE);
 	spin_unlock_irq(&pool->lock);
 	schedule();
 	goto woke_up;
@@ -2318,7 +2320,7 @@ static int rescuer_thread(void *__rescuer)
 	 */
 	rescuer->task->flags |= PF_WQ_WORKER;
 repeat:
-	set_current_state(TASK_INTERRUPTIBLE);
+	set_current_state(TASK_IDLE);
 
 	/*
 	 * By the time the rescuer is requested to stop, the workqueue
@@ -3244,9 +3246,8 @@ static int init_worker_pool(struct worker_pool *pool)
 	INIT_LIST_HEAD(&pool->idle_list);
 	hash_init(pool->busy_hash);
 
-	init_timer_deferrable(&pool->idle_timer);
-	pool->idle_timer.function = idle_worker_timeout;
-	pool->idle_timer.data = (unsigned long)pool;
+	setup_deferrable_timer(&pool->idle_timer, idle_worker_timeout,
+			       (unsigned long)pool);
 
 	setup_timer(&pool->mayday_timer, pool_mayday_timeout,
 		    (unsigned long)pool);
@@ -3957,6 +3958,37 @@ static int wq_clamp_max_active(int max_active, unsigned int flags,
 	return clamp_val(max_active, 1, lim);
 }
 
+/*
+ * Workqueues which may be used during memory reclaim should have a rescuer
+ * to guarantee forward progress.
+ */
+static int init_rescuer(struct workqueue_struct *wq)
+{
+	struct worker *rescuer;
+	int ret;
+
+	if (!(wq->flags & WQ_MEM_RECLAIM))
+		return 0;
+
+	rescuer = alloc_worker(NUMA_NO_NODE);
+	if (!rescuer)
+		return -ENOMEM;
+
+	rescuer->rescue_wq = wq;
+	rescuer->task = kthread_create(rescuer_thread, rescuer, "%s", wq->name);
+	ret = PTR_ERR_OR_ZERO(rescuer->task);
+	if (ret) {
+		kfree(rescuer);
+		return ret;
+	}
+
+	wq->rescuer = rescuer;
+	kthread_bind_mask(rescuer->task, cpu_possible_mask);
+	wake_up_process(rescuer->task);
+
+	return 0;
+}
+
 struct workqueue_struct *__alloc_workqueue_key(const char *fmt,
 					       unsigned int flags,
 					       int max_active,
@@ -4019,29 +4051,8 @@ struct workqueue_struct *__alloc_workqueue_key(const char *fmt,
 	if (alloc_and_link_pwqs(wq) < 0)
 		goto err_free_wq;
 
-	/*
-	 * Workqueues which may be used during memory reclaim should
-	 * have a rescuer to guarantee forward progress.
-	 */
-	if (flags & WQ_MEM_RECLAIM) {
-		struct worker *rescuer;
-
-		rescuer = alloc_worker(NUMA_NO_NODE);
-		if (!rescuer)
-			goto err_destroy;
-
-		rescuer->rescue_wq = wq;
-		rescuer->task = kthread_create(rescuer_thread, rescuer, "%s",
-					       wq->name);
-		if (IS_ERR(rescuer->task)) {
-			kfree(rescuer);
-			goto err_destroy;
-		}
-
-		wq->rescuer = rescuer;
-		kthread_bind_mask(rescuer->task, cpu_possible_mask);
-		wake_up_process(rescuer->task);
-	}
+	if (wq_online && init_rescuer(wq) < 0)
+		goto err_destroy;
 
 	if ((wq->flags & WQ_SYSFS) && workqueue_sysfs_register(wq))
 		goto err_destroy;
@@ -5594,8 +5605,6 @@ int __init workqueue_init_early(void)
 
 	pwq_cache = KMEM_CACHE(pool_workqueue, SLAB_PANIC);
 
-	wq_numa_init();
-
 	/* initialize CPU pools */
 	for_each_possible_cpu(cpu) {
 		struct worker_pool *pool;
@@ -5665,8 +5674,37 @@ int __init workqueue_init_early(void)
  */
 int __init workqueue_init(void)
 {
+	struct workqueue_struct *wq;
 	struct worker_pool *pool;
 	int cpu, bkt;
+
+	/*
+	 * It'd be simpler to initialize NUMA in workqueue_init_early() but
+	 * CPU to node mapping may not be available that early on some
+	 * archs such as power and arm64.  As per-cpu pools created
+	 * previously could be missing node hint and unbound pools NUMA
+	 * affinity, fix them up.
+	 *
+	 * Also, while iterating workqueues, create rescuers if requested.
+	 */
+	wq_numa_init();
+
+	mutex_lock(&wq_pool_mutex);
+
+	for_each_possible_cpu(cpu) {
+		for_each_cpu_worker_pool(pool, cpu) {
+			pool->node = cpu_to_node(cpu);
+		}
+	}
+
+	list_for_each_entry(wq, &workqueues, list) {
+		wq_update_unbound_numa(wq, smp_processor_id(), true);
+		WARN(init_rescuer(wq),
+		     "workqueue: failed to create early rescuer for %s",
+		     wq->name);
+	}
+
+	mutex_unlock(&wq_pool_mutex);
 
 	/* create the initial workers */
 	for_each_online_cpu(cpu) {
