@@ -383,6 +383,4 @@ static inline u64 sched_irqload(int cpu)
 }
 #endif /* CONFIG_SCHED_WALT */
 
-#define walt_cpu_high_irqload(cpu) sched_cpu_high_irqload(cpu)
-
 #endif

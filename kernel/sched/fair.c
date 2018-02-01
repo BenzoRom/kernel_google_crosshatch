@@ -5106,19 +5106,6 @@ static void dequeue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 DEFINE_PER_CPU(cpumask_var_t, load_balance_mask);
 DEFINE_PER_CPU(cpumask_var_t, select_idle_mask);
 
-#ifdef CONFIG_SCHED_CORE_ROTATE
-static int rotate_cpu_start;
-static DEFINE_SPINLOCK(rotate_lock);
-static unsigned long avoid_prev_cpu_last;
-
-static struct find_first_cpu_bit_env first_cpu_bit_env = {
-	.avoid_prev_cpu_last = &avoid_prev_cpu_last,
-	.rotate_cpu_start = &rotate_cpu_start,
-	.interval = HZ,
-	.rotate_lock = &rotate_lock,
-};
-#endif
-
 #ifdef CONFIG_NO_HZ_COMMON
 /*
  * per rq 'load' arrray crap; XXX kill this.
@@ -6869,7 +6856,6 @@ struct find_best_target_env {
 	struct cpumask *rtg_target;
 	bool need_idle;
 	bool placement_boost;
-	bool avoid_prev_cpu;
 };
 
 #ifdef CONFIG_SCHED_WALT
@@ -6948,11 +6934,8 @@ static inline bool skip_sg(struct task_struct *p, struct sched_group *sg,
 static int start_cpu(bool boosted)
 {
 	struct root_domain *rd = cpu_rq(smp_processor_id())->rd;
-	int start_cpu;
 
-	start_cpu = boosted ? rd->max_cap_orig_cpu : rd->min_cap_orig_cpu;
-
-	return walt_start_cpu(start_cpu);
+	return boosted ? rd->max_cap_orig_cpu : rd->min_cap_orig_cpu;
 }
 
 unsigned int sched_smp_overlap_capacity;
@@ -6999,33 +6982,26 @@ static inline int find_best_target(struct task_struct *p, int *backup_cpu,
 	/* Scan CPUs in all SDs */
 	sg = sd->groups;
 	do {
-		cpumask_t search_cpus;
-		bool do_rotate = false, avoid_prev_cpu = false;
-
 		if (skip_sg(p, sg, fbt_env->rtg_target))
 			continue;
 
-		cpumask_copy(&search_cpus, tsk_cpus_allowed(p));
-		cpumask_and(&search_cpus, &search_cpus, sched_group_cpus(sg));
-		i = find_first_cpu_bit(p, &search_cpus, sg, &avoid_prev_cpu,
-				       &do_rotate, &first_cpu_bit_env);
-		if (do_rotate)
-			fbt_env->avoid_prev_cpu = avoid_prev_cpu;
-
-retry:
-		while ((i = cpumask_next(i, &search_cpus)) < nr_cpu_ids) {
+		for_each_cpu_and(i, tsk_cpus_allowed(p), sched_group_cpus(sg)) {
 			unsigned long capacity_curr = capacity_curr_of(i);
 			unsigned long capacity_orig = capacity_orig_of(i);
 			unsigned long wake_util, new_util;
 
-			cpumask_clear_cpu(i, &search_cpus);
-			if (avoid_prev_cpu && i == task_cpu(p))
+			if (!cpu_online(i) || cpu_isolated(i))
 				continue;
 
-			if (!cpu_online(i) || cpu_isolated(i) || is_reserved(i))
+			/*
+			 * This CPU is the target of an active migration that's
+			 * yet to complete. Avoid placing another task on it.
+			 * See check_for_migration()
+			 */
+			if (is_reserved(i))
 				continue;
 
-			if (walt_cpu_high_irqload(i))
+			if (sched_cpu_high_irqload(i))
 				continue;
 
 			trace_sched_cpu_util(i);
@@ -7212,52 +7188,10 @@ retry:
 			target_cpu = i;
 		}
 
-		if (do_rotate) {
-			/*
-			 * We started iteration somewhere in the middle of
-			 * cpumask.  Iterate once again from bit 0 to the
-			 * previous starting point bit.
-			 */
-			do_rotate = false;
-			i = -1;
-			goto retry;
-		}
-
-		if (!sysctl_sched_is_big_little && !prefer_idle) {
-
-			/*
-			 * If we find an idle CPU in the primary cluster,
-			 * stop the search. We select this idle CPU or
-			 * the active CPU (if there is one), whichever
-			 * saves the energy.
-			 */
-			if (best_idle_cpu != -1)
-				break;
-
-			if (fbt_env->placement_boost) {
-				target_capacity = ULONG_MAX;
-				continue;
-			}
-
-			/*
-			 * If we found an active CPU and its utilization
-			 * is below the minimum packing threshold (overlap),
-			 * no need to search further. Otherwise reset
-			 * the target_capacity and continue the search.
-			 */
-			if (target_cpu != -1 && target_util <
-					sched_smp_overlap_capacity)
-				break;
-
-			target_capacity = ULONG_MAX;
-		}
 	} while (sg = sg->next, sg != sd->groups);
 
 	if (best_idle_cpu != -1 && !is_packing_eligible(p, target_cpu, fbt_env,
 					active_cpus_count, best_idle_cstate)) {
-		if (target_cpu == task_cpu(p))
-			fbt_env->avoid_prev_cpu = true;
-
 		target_cpu = best_idle_cpu;
 		best_idle_cpu = -1;
 	}
@@ -7297,6 +7231,12 @@ retry:
 
 	schedstat_inc(p->se.statistics.nr_wakeups_fbt_count);
 	schedstat_inc(this_rq()->eas_stats.fbt_count);
+
+	/* it is possible for target and backup
+	 * to select same CPU - if so, drop backup
+	 */
+	if (*backup_cpu == target_cpu)
+		*backup_cpu = -1;
 
 	return target_cpu;
 }
@@ -7470,7 +7410,6 @@ static int select_energy_cpu_brute(struct task_struct *p, int prev_cpu,
 	fbt_env.placement_boost = task_sched_boost(p) ?
 				  sched_boost_policy() != SCHED_BOOST_NONE :
 				  false;
-	fbt_env.avoid_prev_cpu = false;
 
 	if (bias_to_prev_cpu(p, rtg_target)) {
 		target_cpu = prev_cpu;
@@ -7495,7 +7434,7 @@ static int select_energy_cpu_brute(struct task_struct *p, int prev_cpu,
 	}
 
 	if (fbt_env.placement_boost || fbt_env.need_idle ||
-			fbt_env.avoid_prev_cpu || (rtg_target &&
+			(rtg_target &&
 			!cpumask_test_cpu(prev_cpu, rtg_target))) {
 		target_cpu = next_cpu;
 		goto unlock;
