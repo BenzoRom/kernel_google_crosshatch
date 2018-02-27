@@ -1734,86 +1734,53 @@ static struct task_struct *pick_highest_pushable_task(struct rq *rq, int cpu)
 
 static DEFINE_PER_CPU(cpumask_var_t, local_cpu_mask);
 
-static int find_lowest_rq(struct task_struct *task)
+static int rt_energy_aware_wake_cpu(struct task_struct *task)
 {
 	struct sched_domain *sd;
-	struct sched_group *sg, *sg_target;
+	struct sched_group *sg;
 	struct cpumask *lowest_mask = this_cpu_cpumask_var_ptr(local_cpu_mask);
-	int this_cpu = smp_processor_id();
-	int cpu = -1, best_cpu;
-	struct cpumask search_cpu, backup_search_cpu;
-	unsigned long cpu_capacity;
-	unsigned long best_capacity;
+	int cpu, best_cpu = -1;
+	unsigned long best_capacity = ULONG_MAX;
 	unsigned long util, best_cpu_util = ULONG_MAX;
 	unsigned long best_cpu_util_cum = ULONG_MAX;
 	unsigned long util_cum;
 	unsigned long tutil = task_util(task);
 	int best_cpu_idle_idx = INT_MAX;
 	int cpu_idle_idx = -1;
-	enum sched_boost_policy placement_boost;
+	bool boost_on_big = rt_boost_on_big();
 
-	/* Make sure the mask is initialized first */
-	if (unlikely(!lowest_mask))
-		return -1;
+	cpu = cpu_rq(smp_processor_id())->rd->min_cap_orig_cpu;
+	if (cpu < 0)
+		goto out;
 
-	if (tsk_nr_cpus_allowed(task) == 1)
-		return -1; /* No other targets possible */
-
-	if (!cpupri_find(&task_rq(task)->rd->cpupri, task, lowest_mask))
-		return -1; /* No targets found */
-
-	if (energy_aware()) {
-		sg_target = NULL;
-		best_cpu = -1;
-
-		placement_boost = sched_boost() == FULL_THROTTLE_BOOST ?
-				  sched_boost_policy() : SCHED_BOOST_NONE;
-		best_capacity = placement_boost ? 0 : ULONG_MAX;
-
-		sd = rcu_dereference(per_cpu(sd_ea, task_cpu(task)));
-		if (!sd) {
-			goto noea;
-		}
-
-		sg = sd->groups;
-		do {
-			cpu = group_first_cpu(sg);
-			cpu_capacity = capacity_orig_of(cpu);
-
-			if (unlikely(placement_boost)) {
-				if (cpu_capacity > best_capacity) {
-					best_capacity = cpu_capacity;
-					sg_target = sg;
-				}
-			} else {
-				if (cpu_capacity < best_capacity) {
-					best_capacity = cpu_capacity;
-					sg_target = sg;
-				}
-			}
-		} while (sg = sg->next, sg != sd->groups);
-
-		cpumask_and(&search_cpu, lowest_mask,
-			    sched_group_cpus(sg_target));
-		cpumask_copy(&backup_search_cpu, lowest_mask);
-		cpumask_andnot(&backup_search_cpu, &backup_search_cpu,
-			       &search_cpu);
+	sd = rcu_dereference(per_cpu(sd_ea, cpu));
+	if (!sd)
+		goto out;
 
 retry:
-		for_each_cpu(cpu, &search_cpu) {
-			/*
-			 * Don't use capcity_curr_of() since it will
-			 * double count rt task load.
-			 */
-			util = cpu_util(cpu);
+	sg = sd->groups;
+	do {
+		int fcpu = group_first_cpu(sg);
+		int capacity_orig = capacity_orig_of(fcpu);
 
-			if (__cpu_overutilized(cpu, tutil))
+		if (boost_on_big) {
+			if (!is_max_capacity_cpu(fcpu))
 				continue;
+		} else {
+			if (capacity_orig > best_capacity)
+				continue;
+		}
 
+		for_each_cpu_and(cpu, lowest_mask, sched_group_cpus(sg)) {
 			if (cpu_isolated(cpu))
 				continue;
 
 			if (sched_cpu_high_irqload(cpu))
+				continue;
+
+			util = cpu_util(cpu);
+
+			if (__cpu_overutilized(cpu, tutil))
 				continue;
 
 			/* Find the least loaded CPU */
@@ -1851,21 +1818,43 @@ retry:
 			best_cpu_util_cum = util_cum;
 			best_cpu_util = util;
 			best_cpu = cpu;
+			best_capacity = capacity_orig;
 		}
 
-		if (best_cpu != -1 && placement_boost != SCHED_BOOST_ON_ALL) {
-			return best_cpu;
-		} else if (!cpumask_empty(&backup_search_cpu)) {
-			cpumask_copy(&search_cpu, &backup_search_cpu);
-			cpumask_clear(&backup_search_cpu);
-			cpu = -1;
-			placement_boost = SCHED_BOOST_NONE;
-			goto retry;
-		}
+	} while (sg = sg->next, sg != sd->groups);
+
+	if (unlikely(boost_on_big) && best_cpu == -1) {
+		boost_on_big = false;
+		goto retry;
 	}
 
-noea:
-	cpu = task_cpu(task);
+out:
+	return best_cpu;
+}
+
+static int find_lowest_rq(struct task_struct *task)
+{
+	struct sched_domain *sd;
+	struct cpumask *lowest_mask = this_cpu_cpumask_var_ptr(local_cpu_mask);
+	int this_cpu = smp_processor_id();
+	int cpu = -1;
+
+	/* Make sure the mask is initialized first */
+	if (unlikely(!lowest_mask))
+		return -1;
+
+	if (tsk_nr_cpus_allowed(task) == 1)
+		return -1; /* No other targets possible */
+
+	if (!cpupri_find(&task_rq(task)->rd->cpupri, task, lowest_mask))
+		return -1; /* No targets found */
+
+	if (energy_aware())
+		cpu = rt_energy_aware_wake_cpu(task);
+
+	if (cpu == -1)
+		cpu = task_cpu(task);
+
 	/*
 	 * At this point we have built a mask of cpus representing the
 	 * lowest priority tasks in the system.  Now we want to elect

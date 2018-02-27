@@ -2763,6 +2763,12 @@ static inline unsigned int power_cost(int cpu, bool max)
 extern void walt_sched_energy_populated_callback(void);
 extern void walt_update_min_max_capacity(void);
 
+static inline bool rt_boost_on_big(void)
+{
+	return sched_boost() == FULL_THROTTLE_BOOST ?
+			(sched_boost_policy() == SCHED_BOOST_ON_BIG) : false;
+}
+
 static inline enum sched_boost_policy task_boost_policy(struct task_struct *p)
 {
 	enum sched_boost_policy boost_on_big = task_sched_boost(p) ?
@@ -2808,6 +2814,11 @@ static inline void check_for_migration(struct rq *rq, struct task_struct *p) { }
 static inline int sched_boost(void)
 {
 	return 0;
+}
+
+static inline bool rt_boost_on_big(void)
+{
+	return false;
 }
 
 static inline bool hmp_capable(void) { return false; }
