@@ -938,5 +938,4 @@ void arch_set_freq_scale(const cpumask_t *cpus, unsigned long cur_freq,
 struct sched_domain;
 unsigned long cpufreq_scale_freq_capacity(struct sched_domain *sd, int cpu);
 unsigned long cpufreq_scale_max_freq_capacity(struct sched_domain *sd, int cpu);
-unsigned long cpufreq_scale_min_freq_capacity(struct sched_domain *sd, int cpu);
 #endif /* _LINUX_CPUFREQ_H */
