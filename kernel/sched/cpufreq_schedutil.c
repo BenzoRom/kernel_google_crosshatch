@@ -154,6 +154,15 @@ static bool sugov_up_down_rate_limit(struct sugov_policy *sg_policy, u64 time,
 	return false;
 }
 
+static inline bool use_pelt(void)
+{
+#ifdef CONFIG_SCHED_WALT
+	return (!sysctl_sched_use_walt_cpu_util || walt_disabled);
+#else
+	return true;
+#endif
+}
+
 static unsigned long freq_to_util(struct sugov_policy *sg_policy,
 				  unsigned int freq)
 {
@@ -168,7 +177,7 @@ static void sugov_track_cycles(struct sugov_policy *sg_policy,
 {
 	u64 delta_ns, cycles;
 
-	if (unlikely(!sysctl_sched_use_walt_cpu_util))
+	if (unlikely(use_pelt()))
 		return;
 
 	/* Track cycles in current window */
@@ -186,7 +195,7 @@ static void sugov_calc_avg_cap(struct sugov_policy *sg_policy, u64 curr_ws,
 	u64 last_ws = sg_policy->last_ws;
 	unsigned int avg_freq;
 
-	if (unlikely(!sysctl_sched_use_walt_cpu_util))
+	if (unlikely(use_pelt()))
 		return;
 
 	BUG_ON(curr_ws < last_ws);
@@ -237,7 +246,8 @@ static void sugov_update_commit(struct sugov_policy *sg_policy, u64 time,
 			trace_cpu_frequency(next_freq, cpu);
 		}
 	} else {
-		sg_policy->work_in_progress = true;
+		if (use_pelt())
+			sg_policy->work_in_progress = true;
 		irq_work_queue(&sg_policy->irq_work);
 	}
 }
@@ -439,7 +449,7 @@ static void sugov_walt_adjust(struct sugov_cpu *sg_cpu, unsigned long *util,
 	unsigned long cpu_util = sg_cpu->util;
 	bool is_hiload;
 
-	if (unlikely(!sysctl_sched_use_walt_cpu_util))
+	if (unlikely(use_pelt()))
 		return;
 
 	is_hiload = (cpu_util >= mult_frac(sg_policy->avg_cap,
@@ -490,7 +500,7 @@ static void sugov_update_single(struct update_util_data *hook, u64 time,
 	if (!sugov_should_update_freq(sg_policy, time))
 		return;
 
-	busy = sugov_cpu_is_busy(sg_cpu);
+	busy = use_pelt() && sugov_cpu_is_busy(sg_cpu);
 
 	raw_spin_lock(&sg_policy->update_lock);
 	if (flags & SCHED_CPUFREQ_RT_DL) {
@@ -649,7 +659,8 @@ static void sugov_work(struct kthread_work *work)
 	 */
 	raw_spin_lock_irqsave(&sg_policy->update_lock, flags);
 	freq = sg_policy->next_freq;
-	sg_policy->work_in_progress = false;
+	if (use_pelt())
+		sg_policy->work_in_progress = false;
 	sugov_track_cycles(sg_policy, sg_policy->policy->cur,
 			   sched_ktime_clock());
 	raw_spin_unlock_irqrestore(&sg_policy->update_lock, flags);
