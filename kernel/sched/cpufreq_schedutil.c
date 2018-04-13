@@ -146,11 +146,11 @@ static bool sugov_up_down_rate_limit(struct sugov_policy *sg_policy, u64 time,
 
 	if (next_freq > sg_policy->next_freq &&
 	    delta_ns < sg_policy->up_rate_delay_ns)
-			return true;
+		return true;
 
 	if (next_freq < sg_policy->next_freq &&
 	    delta_ns < sg_policy->down_rate_delay_ns)
-			return true;
+		return true;
 
 	return false;
 }
@@ -190,7 +190,7 @@ static void sugov_calc_avg_cap(struct sugov_policy *sg_policy, u64 curr_ws,
 	if (unlikely(!sysctl_sched_use_walt_cpu_util))
 		return;
 
-	WARN_ON(curr_ws < last_ws);
+	BUG_ON(curr_ws < last_ws);
 	if (curr_ws <= last_ws)
 		return;
 
@@ -215,14 +215,14 @@ static void sugov_update_commit(struct sugov_policy *sg_policy, u64 time,
 	struct cpufreq_policy *policy = sg_policy->policy;
 	unsigned int cpu;
 
+	if (sg_policy->next_freq == next_freq)
+		return;
+
 	if (sugov_up_down_rate_limit(sg_policy, time, next_freq)) {
 		/* Don't cache a raw freq that didn't become next_freq */
 		sg_policy->cached_raw_freq = 0;
 		return;
 	}
-
-	if (sg_policy->next_freq == next_freq)
-		return;
 
 	sg_policy->next_freq = next_freq;
 	sg_policy->last_freq_update_time = time;
@@ -406,11 +406,10 @@ static void sugov_update_single(struct update_util_data *hook, u64 time,
 	unsigned int next_f;
 	bool busy;
 
-	flags &= ~SCHED_CPUFREQ_RT_DL;
-
 	if (!sg_policy->tunables->pl && flags & SCHED_CPUFREQ_PL)
 		return;
 
+	flags &= ~SCHED_CPUFREQ_RT_DL;
 	sugov_set_iowait_boost(sg_cpu, time, flags);
 	sg_cpu->last_update = time;
 
@@ -420,6 +419,7 @@ static void sugov_update_single(struct update_util_data *hook, u64 time,
 	busy = sugov_cpu_is_busy(sg_cpu);
 
 	raw_spin_lock(&sg_policy->update_lock);
+
 	if (flags & SCHED_CPUFREQ_RT_DL) {
 		/* clear cache when it's bypassed */
 		sg_policy->cached_raw_freq = 0;
@@ -437,6 +437,7 @@ static void sugov_update_single(struct update_util_data *hook, u64 time,
 		sg_cpu->util = util;
 		sg_cpu->max = max;
 		sg_cpu->flags = flags;
+
 		sugov_calc_avg_cap(sg_policy, sg_cpu->walt_load.ws,
 				   sg_policy->policy->cur);
 		trace_sugov_util_update(sg_cpu->cpu, sg_cpu->util,
@@ -456,6 +457,7 @@ static void sugov_update_single(struct update_util_data *hook, u64 time,
 			sg_policy->cached_raw_freq = 0;
 		}
 	}
+
 	sugov_update_commit(sg_policy, time, next_f);
 	raw_spin_unlock(&sg_policy->update_lock);
 }
@@ -583,19 +585,6 @@ static void sugov_irq_work(struct irq_work *irq_work)
 
 	sg_policy = container_of(irq_work, struct sugov_policy, irq_work);
 
-	/*
-	 * For RT and deadline tasks, the schedutil governor shoots the
-	 * frequency to maximum. Special care must be taken to ensure that this
-	 * kthread doesn't result in the same behavior.
-	 *
-	 * This is (mostly) guaranteed by the work_in_progress flag. The flag is
-	 * updated only at the end of the sugov_work() function and before that
-	 * the schedutil governor rejects all other frequency scaling requests.
-	 *
-	 * There is a very rare case though, where the RT thread yields right
-	 * after the work_in_progress flag is cleared. The effects of that are
-	 * neglected for now.
-	 */
 	kthread_queue_work(&sg_policy->worker, &sg_policy->work);
 }
 
@@ -611,7 +600,7 @@ static inline struct sugov_tunables *to_sugov_tunables(struct gov_attr_set *attr
 
 static DEFINE_MUTEX(min_rate_lock);
 
-static void update_min_rate_limit_us(struct sugov_policy *sg_policy)
+static void update_min_rate_limit_ns(struct sugov_policy *sg_policy)
 {
 	mutex_lock(&min_rate_lock);
 	sg_policy->min_rate_limit_ns = min(sg_policy->up_rate_delay_ns,
@@ -647,7 +636,7 @@ static ssize_t up_rate_limit_us_store(struct gov_attr_set *attr_set,
 
 	list_for_each_entry(sg_policy, &attr_set->policy_list, tunables_hook) {
 		sg_policy->up_rate_delay_ns = rate_limit_us * NSEC_PER_USEC;
-		update_min_rate_limit_us(sg_policy);
+		update_min_rate_limit_ns(sg_policy);
 	}
 
 	return count;
@@ -667,7 +656,7 @@ static ssize_t down_rate_limit_us_store(struct gov_attr_set *attr_set,
 
 	list_for_each_entry(sg_policy, &attr_set->policy_list, tunables_hook) {
 		sg_policy->down_rate_delay_ns = rate_limit_us * NSEC_PER_USEC;
-		update_min_rate_limit_us(sg_policy);
+		update_min_rate_limit_ns(sg_policy);
 	}
 
 	return count;
@@ -881,10 +870,9 @@ static void sugov_tunables_save(struct cpufreq_policy *policy,
 
 	if (!cached) {
 		cached = kzalloc(sizeof(*tunables), GFP_KERNEL);
-		if (!cached) {
-			pr_warn("Couldn't allocate tunables for caching\n");
+		if (!cached)
 			return;
-		}
+
 		for_each_cpu(cpu, policy->related_cpus)
 			per_cpu(cached_tunables, cpu) = cached;
 	}
@@ -918,9 +906,6 @@ static void sugov_tunables_restore(struct cpufreq_policy *policy)
 	tunables->hispeed_freq = cached->hispeed_freq;
 	tunables->up_rate_limit_us = cached->up_rate_limit_us;
 	tunables->down_rate_limit_us = cached->down_rate_limit_us;
-	sg_policy->up_rate_delay_ns = cached->up_rate_limit_us;
-	sg_policy->down_rate_delay_ns = cached->down_rate_limit_us;
-	update_min_rate_limit_us(sg_policy);
 }
 
 static int sugov_init(struct cpufreq_policy *policy)
@@ -965,12 +950,12 @@ static int sugov_init(struct cpufreq_policy *policy)
 		goto stop_kthread;
 	}
 
+	tunables->up_rate_limit_us =
+				cpufreq_policy_transition_delay_us(policy);
+	tunables->down_rate_limit_us =
+				cpufreq_policy_transition_delay_us(policy);
 	tunables->hispeed_load = DEFAULT_HISPEED_LOAD;
 	tunables->hispeed_freq = 0;
-	tunables->up_rate_limit_us = cpufreq_policy_transition_delay_us(policy);
-	tunables->down_rate_limit_us =
-		cpufreq_policy_transition_delay_us(policy);
-
 	tunables->iowait_boost_enable = false;
 
 	policy->governor_data = sg_policy;
@@ -979,7 +964,8 @@ static int sugov_init(struct cpufreq_policy *policy)
 
 	sugov_tunables_restore(policy);
 
-	ret = kobject_init_and_add(&tunables->attr_set.kobj, &sugov_tunables_ktype,
+	ret = kobject_init_and_add(&tunables->attr_set.kobj,
+				   &sugov_tunables_ktype,
 				   get_governor_parent_kobj(policy), "%s",
 				   schedutil_gov.name);
 	if (ret)
@@ -1039,7 +1025,7 @@ static int sugov_start(struct cpufreq_policy *policy)
 		sg_policy->tunables->up_rate_limit_us * NSEC_PER_USEC;
 	sg_policy->down_rate_delay_ns =
 		sg_policy->tunables->down_rate_limit_us * NSEC_PER_USEC;
-	update_min_rate_limit_us(sg_policy);
+	update_min_rate_limit_ns(sg_policy);
 	sg_policy->last_freq_update_time = 0;
 	sg_policy->next_freq = UINT_MAX;
 	sg_policy->work_in_progress = false;
