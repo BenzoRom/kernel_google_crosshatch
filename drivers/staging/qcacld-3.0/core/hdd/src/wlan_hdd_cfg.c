@@ -824,7 +824,6 @@ struct reg_table_entry g_registry_table[] = {
 		     CFG_RETRY_LIMIT_TWO_MIN,
 		     CFG_RETRY_LIMIT_TWO_MAX),
 
-#ifdef WLAN_AP_STA_CONCURRENCY
 	REG_VARIABLE(CFG_PASSIVE_MAX_CHANNEL_TIME_CONC_NAME, WLAN_PARAM_Integer,
 		     struct hdd_config, nPassiveMaxChnTimeConc,
 		     VAR_FLAGS_OPTIONAL | VAR_FLAGS_RANGE_CHECK_ASSUME_DEFAULT,
@@ -873,7 +872,6 @@ struct reg_table_entry g_registry_table[] = {
 		      CFG_IDLE_TIME_DEFAULT,
 		      CFG_IDLE_TIME_MIN,
 		      CFG_IDLE_TIME_MAX),
-#endif
 
 	REG_VARIABLE(CFG_MAX_PS_POLL_NAME, WLAN_PARAM_Integer,
 		     struct hdd_config, nMaxPsPoll,
@@ -9704,7 +9702,6 @@ QDF_STATUS hdd_set_sme_config(hdd_context_t *pHddCtx)
 	smeConfig->csrConfig.scan_probe_repeat_time =
 		pConfig->scan_probe_repeat_time;
 	smeConfig->csrConfig.scan_num_probes = pConfig->scan_num_probes;
-#ifdef WLAN_AP_STA_CONCURRENCY
 	smeConfig->csrConfig.nActiveMaxChnTimeConc =
 		pConfig->nActiveMaxChnTimeConc;
 	smeConfig->csrConfig.nActiveMinChnTimeConc =
@@ -9717,7 +9714,6 @@ QDF_STATUS hdd_set_sme_config(hdd_context_t *pHddCtx)
 	smeConfig->csrConfig.min_rest_time_conc = pConfig->min_rest_time_conc;
 	smeConfig->csrConfig.idle_time_conc     = pConfig->idle_time_conc;
 
-#endif
 	smeConfig->csrConfig.Is11eSupportEnabled = pConfig->b80211eIsEnabled;
 	smeConfig->csrConfig.WMMSupportMode =
 		hdd_to_csr_wmm_mode(pConfig->WmmMode);
