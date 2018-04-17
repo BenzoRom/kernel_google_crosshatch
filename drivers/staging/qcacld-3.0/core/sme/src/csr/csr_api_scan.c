@@ -162,9 +162,7 @@ QDF_STATUS csr_scan_open(tpAniSirGlobal mac_ctx)
 	csr_ll_open(mac_ctx->hHdd, &mac_ctx->scan.tempScanResults);
 	csr_ll_open(mac_ctx->hHdd, &mac_ctx->scan.channelPowerInfoList24);
 	csr_ll_open(mac_ctx->hHdd, &mac_ctx->scan.channelPowerInfoList5G);
-#ifdef WLAN_AP_STA_CONCURRENCY
 	csr_ll_open(mac_ctx->hHdd, &mac_ctx->scan.scanCmdPendingList);
-#endif
 	mac_ctx->scan.fFullScanIssued = false;
 	mac_ctx->scan.nBssLimit = CSR_MAX_BSS_SUPPORT;
 	return QDF_STATUS_SUCCESS;
@@ -174,14 +172,10 @@ QDF_STATUS csr_scan_close(tpAniSirGlobal pMac)
 {
 	csr_ll_scan_purge_result(pMac, &pMac->scan.tempScanResults);
 	csr_ll_scan_purge_result(pMac, &pMac->scan.scanResultList);
-#ifdef WLAN_AP_STA_CONCURRENCY
 	csr_release_scan_cmd_pending_list(pMac);
-#endif
 	csr_ll_close(&pMac->scan.scanResultList);
 	csr_ll_close(&pMac->scan.tempScanResults);
-#ifdef WLAN_AP_STA_CONCURRENCY
 	csr_ll_close(&pMac->scan.scanCmdPendingList);
-#endif
 	csr_purge_channel_power(pMac, &pMac->scan.channelPowerInfoList24);
 	csr_purge_channel_power(pMac, &pMac->scan.channelPowerInfoList5G);
 	csr_ll_close(&pMac->scan.channelPowerInfoList24);
@@ -211,7 +205,6 @@ static void csr_set_default_scan_timing(tpAniSirGlobal pMac,
 					tSirScanType scanType,
 					tCsrScanRequest *pScanRequest)
 {
-#ifdef WLAN_AP_STA_CONCURRENCY
 	if (csr_is_any_session_connected(pMac)) {
 		/* Reset passive scan time as per ini parameter. */
 		cfg_set_int(pMac, WNI_CFG_PASSIVE_MAXIMUM_CHANNEL_TIME,
@@ -242,11 +235,12 @@ static void csr_set_default_scan_timing(tpAniSirGlobal pMac,
 		/* Return so that fields set above will not be overwritten. */
 		return;
 	}
-#endif
 
-	/* This portion of the code executed if multi-session not supported */
-	/* (WLAN_AP_STA_CONCURRENCY not defined) or no multi-session. */
-	/* Use the "regular" (non-concurrency) default scan timing. */
+	/*
+	 * This portion of the code is executed if no multi-session.
+	 * Use the "regular" (non-concurrency) default scan timing if
+	 * no multi session.
+	 */
 	cfg_set_int(pMac, WNI_CFG_PASSIVE_MAXIMUM_CHANNEL_TIME,
 		    pMac->roam.configParam.nPassiveMaxChnTime);
 	if (pScanRequest->scanType == eSIR_ACTIVE_SCAN) {
@@ -260,14 +254,12 @@ static void csr_set_default_scan_timing(tpAniSirGlobal pMac,
 		pScanRequest->minChnTime =
 			pMac->roam.configParam.nPassiveMinChnTime;
 	}
-#ifdef WLAN_AP_STA_CONCURRENCY
 
 	/* No rest time/Idle time if no sessions are connected. */
 	pScanRequest->restTime = 0;
 	pScanRequest->min_rest_time = 0;
 	pScanRequest->idle_time = 0;
 
-#endif
 }
 
 /**
@@ -537,7 +529,6 @@ QDF_STATUS csr_scan_request(tpAniSirGlobal pMac, uint16_t sessionId,
 		sme_debug("Setting default min %d and max %d ChnTime",
 			scan_req->minChnTime, scan_req->maxChnTime);
 	}
-#ifdef WLAN_AP_STA_CONCURRENCY
 	/*
 	 * Need to set restTime/min_Ret_time/idle_time
 	 * only if at least one session is connected
@@ -557,7 +548,6 @@ QDF_STATUS csr_scan_request(tpAniSirGlobal pMac, uint16_t sessionId,
 			scan_req->minChnTime = cfg_prm->nPassiveMinChnTimeConc;
 		}
 	}
-#endif
 	/* Increase dwell time in case P2P Search and Miracast is not present */
 	if (scan_req->p2pSearch && scan_req->ChannelInfo.numOfChannels
 	    == P2P_SOCIAL_CHANNELS && (!(pMac->sme.miracast_value))) {

@@ -3167,7 +3167,6 @@ enum hdd_dot11_mode {
 #define CFG_RETRY_LIMIT_TWO_MAX        (15)
 #define CFG_RETRY_LIMIT_TWO_DEFAULT    (15)
 
-#ifdef WLAN_AP_STA_CONCURRENCY
 /*
  * <ini>
  * gPassiveMaxChannelTimeConc - Maximum passive scan time in milliseconds.
@@ -3332,7 +3331,6 @@ enum hdd_dot11_mode {
 #define CFG_IDLE_TIME_MIN                           (0)
 #define CFG_IDLE_TIME_MAX                           (25)
 #define CFG_IDLE_TIME_DEFAULT                       (25)
-#endif
 
 #define CFG_MAX_PS_POLL_NAME                   "gMaxPsPoll"
 #define CFG_MAX_PS_POLL_MIN                    WNI_CFG_MAX_PS_POLL_STAMIN
@@ -14502,7 +14500,6 @@ struct hdd_config {
 	uint32_t nInitialDwellTime;     /* in units of milliseconds */
 	bool initial_scan_no_dfs_chnl;
 
-#ifdef WLAN_AP_STA_CONCURRENCY
 	uint32_t nPassiveMinChnTimeConc;        /* in units of milliseconds */
 	uint32_t nPassiveMaxChnTimeConc;        /* in units of milliseconds */
 	uint32_t nActiveMinChnTimeConc; /* in units of milliseconds */
@@ -14512,7 +14509,6 @@ struct hdd_config {
 	uint32_t       min_rest_time_conc;
 	/* In units of milliseconds */
 	uint32_t       idle_time_conc;
-#endif
 
 	uint8_t nMaxPsPoll;
 
