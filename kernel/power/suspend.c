@@ -69,7 +69,7 @@ static const struct platform_s2idle_ops *s2idle_ops;
 static DECLARE_SWAIT_QUEUE_HEAD(s2idle_wait_head);
 
 enum s2idle_states __read_mostly s2idle_state;
-static DEFINE_SPINLOCK(s2idle_lock);
+static DEFINE_RAW_SPINLOCK(s2idle_lock);
 
 #ifdef CONFIG_PM_SLEEP_MONITOR
 /* Suspend monitor thread toggle reason */
@@ -219,12 +219,12 @@ static void s2idle_enter(void)
 	stop_suspend_mon();
 #endif
 
-	spin_lock_irq(&s2idle_lock);
+	raw_spin_lock_irq(&s2idle_lock);
 	if (pm_wakeup_pending())
 		goto out;
 
 	s2idle_state = S2IDLE_STATE_ENTER;
-	spin_unlock_irq(&s2idle_lock);
+	raw_spin_unlock_irq(&s2idle_lock);
 
 	get_online_cpus();
 	cpuidle_resume();
@@ -238,11 +238,11 @@ static void s2idle_enter(void)
 	cpuidle_pause();
 	put_online_cpus();
 
-	spin_lock_irq(&s2idle_lock);
+	raw_spin_lock_irq(&s2idle_lock);
 
  out:
 	s2idle_state = S2IDLE_STATE_NONE;
-	spin_unlock_irq(&s2idle_lock);
+	raw_spin_unlock_irq(&s2idle_lock);
 
 #ifdef CONFIG_PM_SLEEP_MONITOR
 	start_suspend_mon();
@@ -301,12 +301,12 @@ void s2idle_wake(void)
 {
 	unsigned long flags;
 
-	spin_lock_irqsave(&s2idle_lock, flags);
+	raw_spin_lock_irqsave(&s2idle_lock, flags);
 	if (s2idle_state > S2IDLE_STATE_NONE) {
 		s2idle_state = S2IDLE_STATE_WAKE;
 		swake_up(&s2idle_wait_head);
 	}
-	spin_unlock_irqrestore(&s2idle_lock, flags);
+	raw_spin_unlock_irqrestore(&s2idle_lock, flags);
 }
 EXPORT_SYMBOL_GPL(s2idle_wake);
 
