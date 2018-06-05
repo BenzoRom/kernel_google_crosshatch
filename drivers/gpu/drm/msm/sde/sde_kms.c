@@ -957,7 +957,8 @@ static void _sde_kms_drm_check_dpms(struct drm_atomic_state *old_state,
 			old_mode = MSM_DRM_BLANK_POWERDOWN;
 		}
 
-		if (old_mode != new_mode) {
+		if (old_mode != new_mode &&
+			connector->state->crtc->state->active_changed) {
 			struct msm_drm_notifier notifier_data;
 
 			pr_debug("power mode change detected %d->%d\n",
