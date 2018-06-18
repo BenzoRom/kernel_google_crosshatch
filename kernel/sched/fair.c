@@ -7468,7 +7468,6 @@ static int select_energy_cpu_brute(struct task_struct *p, int prev_cpu,
 	schedstat_inc(p->se.statistics.nr_wakeups_secb_attempts);
 	schedstat_inc(this_rq()->eas_stats.secb_attempts);
 
-	rcu_read_lock();
 	boosted = task_is_boosted(p);
 #ifdef CONFIG_CGROUP_SCHEDTUNE
 	prefer_idle = schedtune_prefer_idle(p) > 0;
@@ -7490,13 +7489,13 @@ static int select_energy_cpu_brute(struct task_struct *p, int prev_cpu,
 	if (bias_to_prev_cpu(p, rtg_target)) {
 		target_cpu = prev_cpu;
 		fastpath = PREV_CPU_BIAS;
-		goto unlock;
+		goto out;
 	}
 
 	sd = rcu_dereference(per_cpu(sd_ea, prev_cpu));
 	if (!sd) {
 		target_cpu = prev_cpu;
-		goto unlock;
+		goto out;
 	}
 
 	sync_entity_load_avg(&p->se);
@@ -7506,14 +7505,14 @@ static int select_energy_cpu_brute(struct task_struct *p, int prev_cpu,
 				    prefer_idle, &fbt_env);
 	if (next_cpu == -1) {
 		target_cpu = prev_cpu;
-		goto unlock;
+		goto out;
 	}
 
 	if (fbt_env.placement_boost || fbt_env.need_idle ||
 			(rtg_target &&
 			!cpumask_test_cpu(prev_cpu, rtg_target))) {
 		target_cpu = next_cpu;
-		goto unlock;
+		goto out;
 	}
 
 	/* Unconditionally prefer IDLE CPUs for boosted/prefer_idle tasks */
@@ -7521,7 +7520,7 @@ static int select_energy_cpu_brute(struct task_struct *p, int prev_cpu,
 		schedstat_inc(p->se.statistics.nr_wakeups_secb_idle_bt);
 		schedstat_inc(this_rq()->eas_stats.secb_idle_bt);
 		target_cpu = next_cpu;
-		goto unlock;
+		goto out;
 	}
 
 	target_cpu = prev_cpu;
@@ -7555,7 +7554,7 @@ static int select_energy_cpu_brute(struct task_struct *p, int prev_cpu,
 			schedstat_inc(p->se.statistics.nr_wakeups_secb_insuff_cap);
 			schedstat_inc(this_rq()->eas_stats.secb_insuff_cap);
 			target_cpu = next_cpu;
-			goto unlock;
+			goto out;
 		}
 
 		/* Check if EAS_CPU_NXT is a more energy efficient CPU */
@@ -7563,20 +7562,19 @@ static int select_energy_cpu_brute(struct task_struct *p, int prev_cpu,
 			schedstat_inc(p->se.statistics.nr_wakeups_secb_nrg_sav);
 			schedstat_inc(this_rq()->eas_stats.secb_nrg_sav);
 			target_cpu = eenv.cpu[eenv.next_idx].cpu_id;
-			goto unlock;
+			goto out;
 		}
 
 		schedstat_inc(p->se.statistics.nr_wakeups_secb_no_nrg_sav);
 		schedstat_inc(this_rq()->eas_stats.secb_no_nrg_sav);
 		target_cpu = prev_cpu;
-		goto unlock;
+		goto out;
 	}
 
 	schedstat_inc(p->se.statistics.nr_wakeups_secb_count);
 	schedstat_inc(this_rq()->eas_stats.secb_count);
 
-unlock:
-	rcu_read_unlock();
+out:
 	trace_sched_task_util(p, next_cpu, backup_cpu, target_cpu,
 			      fbt_env.need_idle, fastpath,
 			      fbt_env.placement_boost, rtg_target ?
@@ -7632,7 +7630,10 @@ select_task_rq_fair(struct task_struct *p, int prev_cpu, int sd_flag, int wake_f
 		 */
 		bool sync_boost = sync && cpu >= start_cpu(p, true, NULL);
 
-		return select_energy_cpu_brute(p, prev_cpu, sync_boost);
+		rcu_read_lock();
+		new_cpu = select_energy_cpu_brute(p, prev_cpu, sync_boost);
+		rcu_read_unlock();
+		return new_cpu;
 	}
 
 	rcu_read_lock();
