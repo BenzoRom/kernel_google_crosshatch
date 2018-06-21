@@ -6967,6 +6967,8 @@ static inline int find_best_target(struct task_struct *p, int *backup_cpu,
 	int target_cpu = -1;
 	int cpu, i;
 	unsigned int active_cpus_count = 0;
+	int prev_cpu = task_cpu(p);
+	int isolated_candidate = -1;
 
 	*backup_cpu = -1;
 
@@ -7002,6 +7004,9 @@ static inline int find_best_target(struct task_struct *p, int *backup_cpu,
 
 			if (!cpu_online(i) || cpu_isolated(i))
 				continue;
+
+			if (isolated_candidate == -1)
+				isolated_candidate = i;
 
 			/*
 			 * This CPU is the target of an active migration that's
@@ -7234,6 +7239,11 @@ static inline int find_best_target(struct task_struct *p, int *backup_cpu,
 		*backup_cpu = prefer_idle
 		? best_active_cpu
 		: best_idle_cpu;
+
+	if (target_cpu == -1 && cpu_isolated(prev_cpu) &&
+			isolated_candidate != -1) {
+		target_cpu = isolated_candidate;
+	}
 
 	trace_sched_find_best_target(p, prefer_idle, min_util, cpu,
 				     best_idle_cpu, best_active_cpu,
