@@ -3918,7 +3918,7 @@ __busy_set_if_active(const struct i915_gem_active *active,
 	 * wrong engine as being busy (but we guarantee that the result
 	 * is at least self-consistent).
 	 *
-	 * As we use SLAB_DESTROY_BY_RCU, the request may be reallocated
+	 * As we use SLAB_TYPESAFE_BY_RCU, the request may be reallocated
 	 * whilst we are inspecting it, even under the RCU read lock as we are.
 	 * This means that there is a small window for the engine and/or the
 	 * seqno to have been overwritten. The seqno will always be in the
@@ -4605,7 +4605,7 @@ i915_gem_load_init(struct drm_device *dev)
 				  sizeof(struct drm_i915_gem_request), 0,
 				  SLAB_HWCACHE_ALIGN |
 				  SLAB_RECLAIM_ACCOUNT |
-				  SLAB_DESTROY_BY_RCU,
+				  SLAB_TYPESAFE_BY_RCU,
 				  NULL);
 
 	INIT_LIST_HEAD(&dev_priv->context_list);

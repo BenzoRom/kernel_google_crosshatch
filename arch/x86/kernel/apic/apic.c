@@ -2137,7 +2137,11 @@ static int allocate_logical_cpuid(int apicid)
 
 	/* Allocate a new cpuid. */
 	if (nr_logical_cpuids >= nr_cpu_ids) {
+<<<<<<< HEAD
 		WARN_ONCE(1, "Only %d processors supported."
+=======
+		WARN_ONCE(1, "APIC: NR_CPUS/possible_cpus limit of %u reached. "
+>>>>>>> 9b130ad5bb8255... treewide: make "nr_cpu_ids" unsigned
 			     "Processor %d/0x%x and the rest are ignored.\n",
 			     nr_cpu_ids - 1, nr_logical_cpuids, apicid);
 		return -1;
@@ -2194,7 +2198,7 @@ int generic_processor_info(int apicid, int version)
 		int thiscpu = max + disabled_cpus - 1;
 
 		pr_warning(
-			"APIC: NR_CPUS/possible_cpus limit of %i almost"
+			"APIC: NR_CPUS/possible_cpus limit of %u almost"
 			" reached. Keeping one slot for boot cpu."
 			"  Processor %d/0x%x ignored.\n", max, thiscpu, apicid);
 
@@ -2205,7 +2209,7 @@ int generic_processor_info(int apicid, int version)
 	if (num_processors >= nr_cpu_ids) {
 		int thiscpu = max + disabled_cpus;
 
-		pr_warning("APIC: NR_CPUS/possible_cpus limit of %i "
+		pr_warning("APIC: NR_CPUS/possible_cpus limit of %u "
 			   "reached. Processor %d/0x%x ignored.\n",
 			   max, thiscpu, apicid);
 
