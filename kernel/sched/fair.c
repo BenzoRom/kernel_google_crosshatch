@@ -7488,7 +7488,7 @@ cpu_is_in_target_set(struct task_struct *p, int cpu, struct cpumask *rtg_target)
 #ifdef CONFIG_SCHED_WALT
 static inline bool is_task_util_above_min_thresh(struct task_struct *p)
 {
-	unsigned int threshold = (sysctl_sched_boost == CONSERVATIVE_BOOST) ?
+	unsigned int threshold = (sched_boost() == CONSERVATIVE_BOOST) ?
 			sysctl_sched_min_task_util_for_boost :
 			sysctl_sched_min_task_util_for_colocation;
 
@@ -12083,9 +12083,6 @@ static void walt_check_for_rotation(struct rq *src_rq)
 	struct walt_rotate_work *wr = NULL;
 
 	if (!walt_rotation_enabled)
-		return;
-
-	if (got_boost_kick())
 		return;
 
 	if (is_max_capacity_cpu(src_cpu))
