@@ -667,6 +667,7 @@ export CFLAGS_GCOV CFLAGS_KCOV
 
 ifeq ($(ld-name),lld)
 KBUILD_CFLAGS	+= -fuse-ld=lld
+LDFLAGS		+= -O2
 endif
 
 # The arch Makefile can set ARCH_{CPP,A,C}FLAGS to override the default
