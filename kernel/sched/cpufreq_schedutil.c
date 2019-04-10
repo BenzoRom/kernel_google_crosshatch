@@ -19,14 +19,6 @@
 #include "sched.h"
 #include "tune.h"
 
-/* Stub out fast switch routines present on mainline to reduce the backport
- * overhead. */
-#define cpufreq_driver_fast_switch(x, y) 0
-#define cpufreq_enable_fast_switch(x)
-#define cpufreq_disable_fast_switch(x)
-#define LATENCY_MULTIPLIER			(1000)
-#define SUGOV_KTHREAD_PRIORITY	50
-
 struct sugov_tunables {
 	struct gov_attr_set attr_set;
 	unsigned int up_rate_limit_us;
@@ -1175,6 +1167,12 @@ static void sugov_limits(struct cpufreq_policy *policy)
 		raw_spin_unlock_irqrestore(&sg_policy->update_lock, flags);
 		cpufreq_policy_apply_limits(policy);
 		mutex_unlock(&sg_policy->work_lock);
+	} else {
+		raw_spin_lock_irqsave(&sg_policy->update_lock, flags);
+		sugov_track_cycles(sg_policy, sg_policy->policy->cur,
+				   sched_ktime_clock());
+		cpufreq_policy_apply_limits_fast(policy);
+		raw_spin_unlock_irqrestore(&sg_policy->update_lock, flags);
 	}
 
 	sg_policy->need_freq_update = true;
