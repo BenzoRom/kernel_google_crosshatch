@@ -650,9 +650,9 @@ ifneq ($(ld-name),lld)
 # use GNU gold with LLVMgold for LTO linking, and LD for vmlinux_link
 LDFINAL_vmlinux := $(LD)
 LD		:= $(LDGOLD)
-LDFLAGS		+= -plugin LLVMgold.so
-LDFLAGS		+= -plugin-opt=-function-sections
-LDFLAGS		+= -plugin-opt=-data-sections
+LDFLAGS		+= --plugin=LLVMgold.so
+LDFLAGS		+= --plugin-opt=-function-sections
+LDFLAGS		+= --plugin-opt=-data-sections
 endif
 # use llvm-ar for building symbol tables from IR files, and llvm-dis instead
 # of objdump for processing symbol versions and exports
@@ -696,6 +696,24 @@ else
 lto-clang-flags	:= -flto
 endif
 lto-clang-flags += -fvisibility=default $(call cc-option, -fsplit-lto-unit)
+
+# ThinLTO Cache
+ifdef CONFIG_THINLTO
+ifdef KERNEL_THINLTO_CACHE_PATH
+THINLTO_CACHE_PATH := $(KERNEL_THINLTO_CACHE_PATH)
+else
+THINLTO_CACHE_PATH := .thinlto-cache
+endif
+ifeq ($(ld-name),lld)
+lld-flags	:= --thinlto-cache-dir=$(THINLTO_CACHE_PATH)
+lld-flags	+= --thinlto-cache-policy=cache_size=5%:cache_size_bytes=5g
+else ifeq ($(ld-name),gold)
+gold-flags	:= --plugin-opt=cache-dir=$(THINLTO_CACHE_PATH)
+gold-flags	+= --plugin-opt=cache-policy=cache_size=5%:cache_size_bytes=5g
+endif
+endif
+
+LDFLAGS += $(lld-flags) $(gold-flags)
 
 # allow disabling only clang LTO where needed
 DISABLE_LTO_CLANG := -fno-lto
