@@ -685,6 +685,15 @@ endif
 
 ifdef CONFIG_LTO_CLANG
 lto-clang-flags	:= -flto=thin -fsplit-lto-unit -fvisibility=hidden
+ifdef KERNEL_THINLTO_CACHE
+ifeq ($(ld-name),lld)
+LDFLAGS		+= --thinlto-cache-dir=$(KERNEL_THINLTO_CACHE)
+LDFLAGS		+= --thinlto-cache-policy=cache_size=5%:cache_size_bytes=5g
+else
+LDFLAGS		+= -plugin-opt,cache-dir=$(KERNEL_THINLTO_CACHE)
+LDFLAGS		+= -plugin-opt,cache-policy=cache_size=5%:cache_size_bytes=5g
+endif
+endif
 
 # allow disabling only clang LTO where needed
 DISABLE_LTO_CLANG := -fno-lto -fvisibility=default
