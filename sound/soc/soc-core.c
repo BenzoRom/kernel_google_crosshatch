@@ -1043,8 +1043,6 @@ static int soc_bind_dai_link(struct snd_soc_card *card,
 	for (i = 0; i < rtd->num_codecs; i++) {
 		codec_dais[i] = snd_soc_find_dai(&codecs[i]);
 		if (!codec_dais[i]) {
-			dev_err(card->dev, "ASoC: CODEC DAI %s not registered\n",
-				codecs[i].dai_name);
 			goto _err_defer;
 		}
 	}
@@ -1072,8 +1070,6 @@ static int soc_bind_dai_link(struct snd_soc_card *card,
 		rtd->platform = platform;
 	}
 	if (!rtd->platform) {
-		dev_err(card->dev, "ASoC: platform %s not registered\n",
-			dai_link->platform_name);
 		goto _err_defer;
 	}
 
