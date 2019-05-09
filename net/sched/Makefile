@@ -2,6 +2,8 @@
 # Makefile for the Linux Traffic Control Unit.
 #
 
+CFLAGS_sch_htb.o += $(DISABLE_LTO)
+
 obj-y	:= sch_generic.o sch_mq.o
 
 obj-$(CONFIG_NET_SCHED)		+= sch_api.o sch_blackhole.o
