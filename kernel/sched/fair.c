@@ -12372,9 +12372,9 @@ static inline void walt_check_for_rotation(struct rq *rq)
 static DEFINE_RAW_SPINLOCK(migration_lock);
 void check_for_migration(struct rq *rq, struct task_struct *p)
 {
-	int new_cpu;
+	int new_cpu = -1;
 	int active_balance;
-	int cpu = task_cpu(p);
+	int prev_cpu = task_cpu(p);
 
 	if (rq->misfit_task) {
 		if (rq->curr->state != TASK_RUNNING ||
@@ -12386,14 +12386,15 @@ void check_for_migration(struct rq *rq, struct task_struct *p)
 
 		raw_spin_lock(&migration_lock);
 		rcu_read_lock();
-		new_cpu = select_energy_cpu_brute(p, cpu, 0);
+		new_cpu = select_energy_cpu_brute(p, prev_cpu, 0);
 		rcu_read_unlock();
-		if (capacity_orig_of(new_cpu) > capacity_orig_of(cpu)) {
+		if ((new_cpu != -1) && (new_cpu != prev_cpu) &&
+		    (capacity_orig_of(new_cpu) > capacity_orig_of(prev_cpu))) {
 			active_balance = kick_active_balance(rq, p, new_cpu);
 			if (active_balance) {
 				mark_reserved(new_cpu);
 				raw_spin_unlock(&migration_lock);
-				stop_one_cpu_nowait(cpu,
+				stop_one_cpu_nowait(prev_cpu,
 					active_load_balance_cpu_stop, rq,
 					&rq->active_balance_work);
 				return;
