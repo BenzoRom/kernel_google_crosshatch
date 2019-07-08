@@ -19,11 +19,6 @@
 #include "sched.h"
 #include "tune.h"
 
-/* Stub out fast switch routines present on mainline to reduce the backport
- * overhead. */
-#define cpufreq_driver_fast_switch(x, y) 0
-#define cpufreq_enable_fast_switch(x)
-#define cpufreq_disable_fast_switch(x)
 #define LATENCY_MULTIPLIER			(1000)
 #define SUGOV_KTHREAD_PRIORITY	50
 
@@ -1117,7 +1112,8 @@ static void sugov_stop(struct cpufreq_policy *policy)
 static void sugov_limits(struct cpufreq_policy *policy)
 {
 	struct sugov_policy *sg_policy = policy->governor_data;
-	unsigned long flags;
+	unsigned long flags, now;
+	unsigned int freq;
 
 	if (!policy->fast_switch_enabled) {
 		mutex_lock(&sg_policy->work_lock);
@@ -1129,9 +1125,16 @@ static void sugov_limits(struct cpufreq_policy *policy)
 		mutex_unlock(&sg_policy->work_lock);
 	} else {
 		raw_spin_lock_irqsave(&sg_policy->update_lock, flags);
-		sugov_track_cycles(sg_policy, sg_policy->policy->cur,
-				   sched_ktime_clock());
-		cpufreq_policy_apply_limits_fast(policy);
+		freq = policy->cur;
+		now = sched_ktime_clock();
+
+		/*
+		 * cpufreq_driver_resolve_freq() has a clamp, so we do not need
+		 * to do any sort of additional validation here.
+		 */
+		freq = cpufreq_driver_resolve_freq(policy, freq);
+		sg_policy->cached_raw_freq = freq;
+		sugov_fast_switch(sg_policy, now, freq);
 		raw_spin_unlock_irqrestore(&sg_policy->update_lock, flags);
 	}
 
