@@ -529,6 +529,8 @@ CLANG_FLAGS	+= -no-integrated-as
 CLANG_FLAGS	+= -Werror=unknown-warning-option
 KBUILD_CFLAGS	+= $(CLANG_FLAGS)
 KBUILD_AFLAGS	+= $(CLANG_FLAGS)
+# Enable experimental new pass manager for clang
+KBUILD_CFLAGS	+= $(call cc-option,-fexperimental-new-pass-manager)
 endif
 
 ifeq ($(mixed-targets),1)
@@ -696,6 +698,11 @@ else
 LDFLAGS		+= -plugin-opt,cache-dir=$(KERNEL_THINLTO_CACHE)
 LDFLAGS		+= -plugin-opt,cache-policy=cache_size=5%:cache_size_bytes=5g
 endif
+endif
+
+# Enable experimental new pass manager for lld
+ifeq ($(ld-name),lld)
+LDFLAGS		+= $(call ld-option, --lto-new-pass-manager,)
 endif
 
 # allow disabling only clang LTO where needed
