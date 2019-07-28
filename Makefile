@@ -660,7 +660,10 @@ export CFLAGS_GCOV CFLAGS_KCOV
 
 ifeq ($(ld-name),lld)
 KBUILD_CFLAGS	+= -fuse-ld=lld
-LDFLAGS		+= -O2
+LDFLAGS		+= -O3
+ifdef CONFIG_LTO_CLANG
+LDFLAGS		+= $(call ld-option, --lto-O3,)
+endif
 endif
 
 # The arch Makefile can set ARCH_{CPP,A,C}FLAGS to override the default
@@ -746,14 +749,9 @@ DISABLE_SCS	:= -fno-sanitize=shadow-call-stack
 export DISABLE_SCS
 endif
 
-ifdef CONFIG_CC_OPTIMIZE_FOR_SIZE
-KBUILD_CFLAGS	+= -Os $(call cc-disable-warning,maybe-uninitialized,)
-else
-ifdef CONFIG_PROFILE_ALL_BRANCHES
-KBUILD_CFLAGS	+= -O2 $(call cc-disable-warning,maybe-uninitialized,)
-else
-KBUILD_CFLAGS   += -O2
-endif
+ifeq ($(cc-name),clang)
+KBUILD_CFLAGS	+= -O3
+KBUILD_CFLAGS	+= -mcpu=cortex-a55+crypto+crc
 endif
 
 KBUILD_CFLAGS += $(call cc-ifversion, -lt, 0409, \
@@ -823,6 +821,7 @@ KBUILD_CFLAGS += $(call cc-disable-warning, tautological-compare)
 # See modpost pattern 2
 KBUILD_CFLAGS += $(call cc-option, -mno-global-merge,)
 KBUILD_CFLAGS += $(call cc-option, -fcatch-undefined-behavior)
+KBUILD_CFLAGS += $(call cc-disable-warning, incompatible-pointer-types)
 else
 
 # These warnings generated too much noise in a regular build.
@@ -925,9 +924,6 @@ KBUILD_CFLAGS   += $(call cc-option,-Werror=strict-prototypes)
 
 # Prohibit date/time macros, which would make the build non-deterministic
 KBUILD_CFLAGS   += $(call cc-option,-Werror=date-time)
-
-# enforce correct pointer usage
-KBUILD_CFLAGS   += $(call cc-option,-Werror=incompatible-pointer-types)
 
 # use the deterministic mode of AR if available
 KBUILD_ARFLAGS := $(call ar-option,D)
