@@ -2786,6 +2786,13 @@ static inline bool is_min_capacity_cluster(struct sched_cluster *cluster)
 	return is_min_capacity_cpu(cluster_first_cpu(cluster));
 }
 
+struct sched_avg_stats {
+	int nr;
+	int nr_misfit;
+	int nr_max;
+};
+extern void sched_get_nr_running_avg(struct sched_avg_stats *stats);
+
 #else	/* CONFIG_SCHED_WALT */
 
 struct walt_sched_stats;
@@ -2929,13 +2936,6 @@ static inline bool energy_aware(void)
 {
 	return sched_feat(ENERGY_AWARE);
 }
-
-struct sched_avg_stats {
-	int nr;
-	int nr_misfit;
-	int nr_max;
-};
-extern void sched_get_nr_running_avg(struct sched_avg_stats *stats);
 
 #ifdef CONFIG_SMP
 static inline void sched_irq_work_queue(struct irq_work *work)
