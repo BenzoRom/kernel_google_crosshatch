@@ -142,6 +142,7 @@ static int psy_changed(struct notifier_block *nb,
 	return NOTIFY_OK;
 }
 
+#ifdef CONFIG_GOOGLE_CHARGE_INFO
 static char *psy_chgt_str[] = {
 	"Unknown", "N/A", "Trickle", "Fast", "Taper"
 };
@@ -152,6 +153,7 @@ static char *psy_usb_type_str[] = {
 	"Wireless", "USB_FLOAT", "BMS", "Parallel", "Main", "Wipower",
 	"TYPEC", "TYPEC_UFP", "TYPEC_DFP"
 };
+#endif
 
 #define PSY_GET_PROP(psy, psp) psy_get_prop(psy, psp, #psp)
 static inline int psy_get_prop(struct power_supply *psy,
@@ -215,6 +217,7 @@ static inline void reset_chg_drv_state(struct chg_drv *chg_drv)
 	PSY_SET_PROP(chg_drv->chg_psy, POWER_SUPPLY_PROP_CHARGE_DISABLE, 1);
 }
 
+#ifdef CONFIG_GOOGLE_CHARGE_INFO
 static void pr_info_states(struct power_supply *chg_psy,
 			   struct power_supply *usb_psy,
 			   struct power_supply *wlc_psy,
@@ -253,6 +256,7 @@ static void pr_info_states(struct power_supply *chg_psy,
 				     POWER_SUPPLY_PROP_CURRENT_MAX) / 1000,
 			PSY_GET_PROP(wlc_psy, POWER_SUPPLY_PROP_TEMP));
 }
+#endif
 
 /* returns 1 if charging should be disabled given the current battery capacity
  * given in percent, return 0 if charging should happen
@@ -271,21 +275,29 @@ static int is_charging_disabled(struct chg_drv *chg_drv, int capacity)
 	    (upperbd <= DEFAULT_CHARGE_STOP_LEVEL) &&
 	    (lowerbd >= DEFAULT_CHARGE_START_LEVEL)) {
 		if (chg_drv->lowerdb_reached && upperbd <= capacity) {
+#ifdef CONFIG_GOOGLE_CHARGE_INFO
 			pr_info("%s: lowerbd=%d, upperbd=%d, capacity=%d, lowerdb_reached=1->0, charging off\n",
 				__func__, lowerbd, upperbd, capacity);
+#endif
 			disable_charging = 1;
 			chg_drv->lowerdb_reached = false;
 		} else if (!chg_drv->lowerdb_reached && lowerbd < capacity) {
+#ifdef CONFIG_GOOGLE_CHARGE_INFO
 			pr_info("%s: lowerbd=%d, upperbd=%d, capacity=%d, charging off\n",
 				__func__, lowerbd, upperbd, capacity);
+#endif
 			disable_charging = 1;
 		} else if (!chg_drv->lowerdb_reached && capacity <= lowerbd) {
+#ifdef CONFIG_GOOGLE_CHARGE_INFO
 			pr_info("%s: lowerbd=%d, upperbd=%d, capacity=%d, lowerdb_reached=0->1, charging on\n",
 				__func__, lowerbd, upperbd, capacity);
+#endif
 			chg_drv->lowerdb_reached = true;
 		} else {
+#ifdef CONFIG_GOOGLE_CHARGE_INFO
 			pr_info("%s: lowerbd=%d, upperbd=%d, capacity=%d, charging on\n",
 				__func__, lowerbd, upperbd, capacity);
+#endif
 		}
 	}
 
@@ -458,15 +470,19 @@ static void chg_work(struct work_struct *work)
 	    usb_present == -EINVAL || wlc_online == -EINVAL)
 		goto error_rerun;
 
+#ifdef CONFIG_GOOGLE_CHARGE_INFO
 	pr_info_states(chg_psy, usb_psy, wlc_psy,
 		       temp, ibatt, vbatt, vchrg,
 		       chg_type, chg_drv->fv_uv,
 		       soc, usb_present, wlc_online);
+#endif
 
 	if (temp < profile->temp_limits[0] ||
 	    temp > profile->temp_limits[profile->temp_nb_limits - 1]) {
 		if (!chg_drv->stop_charging) {
+#ifdef CONFIG_GOOGLE_CHARGE_INFO
 			pr_info("batt. temp. off limits, disabling charging\n");
+#endif
 			reset_chg_drv_state(chg_drv);
 		}
 		/* status will be discharging when disabled but we want to keep
@@ -475,7 +491,9 @@ static void chg_work(struct work_struct *work)
 		rerun_work = true;
 		goto handle_rerun;
 	} else if (chg_drv->stop_charging) {
+#ifdef CONFIG_GOOGLE_CHARGE_INFO
 		pr_info("batt. temp. ok, enabling charging\n");
+#endif
 		PSY_SET_PROP(chg_psy, POWER_SUPPLY_PROP_CHARGE_DISABLE, 0);
 		chg_drv->stop_charging = false;
 	}
@@ -518,9 +536,11 @@ static void chg_work(struct work_struct *work)
 		if (chg_drv->vbatt_idx == -1)
 			vbatt_idx = msc_voltage_idx(profile, vbatt);
 
+#ifdef CONFIG_GOOGLE_CHARGE_INFO
 		pr_info("MSC_SEED temp=%d vbatt=%d temp_idx:%d->%d, vbatt_idx:%d->%d\n",
 			temp, vbatt, chg_drv->temp_idx, temp_idx,
 			chg_drv->vbatt_idx, vbatt_idx);
+#endif
 
 		/* Debounce tier switch only when not already switching */
 		if (chg_drv->checked_tier_switch_cnt == 0)
@@ -536,11 +556,13 @@ static void chg_work(struct work_struct *work)
 		vbatt_idx = msc_voltage_idx(profile, vbatt);
 		update_interval = profile->cv_update_interval;
 
+#ifdef CONFIG_GOOGLE_CHARGE_INFO
 		pr_info("MSC_DSG vbatt_idx:%d->%d vbatt=%d ibatt=%d fv_uv=%d cv_cnt=%d ov_cnt=%d\n",
 			chg_drv->vbatt_idx, vbatt_idx,
 			vbatt, ibatt, fv_uv,
 			chg_drv->checked_cv_cnt,
 			chg_drv->checked_ov_cnt);
+#endif
 	} else if (chg_drv->vbatt_idx == profile->volt_nb_limits - 1) {
 		/* will not adjust charger voltage only in the configured
 		 * last tier.
@@ -548,8 +570,10 @@ static void chg_work(struct work_struct *work)
 		 * tiers with max charge current == 0.
 		 * NOTE: should I use a voltage limit instead?
 		 */
+#ifdef CONFIG_GOOGLE_CHARGE_INFO
 		pr_info("MSC_LAST vbatt=%d ibatt=%d fv_uv=%d\n",
 			vbatt, ibatt, fv_uv);
+#endif
 	} else {
 		const int vtier = profile->volt_limits[vbatt_idx];
 		const int utv_margin = profile->cv_range_accuracy;
@@ -589,19 +613,25 @@ static void chg_work(struct work_struct *work)
 			/* no pullback, next tier if already counting */
 				vbatt_idx = chg_drv->vbatt_idx + 1;
 
+#ifdef CONFIG_GOOGLE_CHARGE_INFO
 				pr_info("MSC_VSWITCH vt=%d vb=%d ibatt=%d\n",
 					vtier, vbatt, ibatt);
+#endif
 			} else if (-ibatt == cc_max) {
 			/* pullback, double penalty if at full current */
 				chg_drv->checked_ov_cnt *= 2;
 
+#ifdef CONFIG_GOOGLE_CHARGE_INFO
 				pr_info("MSC_VOVER vt=%d  vb=%d ibatt=%d fv_uv=%d->%d\n",
 					vtier, vbatt, ibatt,
 					chg_drv->fv_uv, fv_uv);
+#endif
 			} else {
+#ifdef CONFIG_GOOGLE_CHARGE_INFO
 				pr_info("MSC_PULLBACK vt=%d vb=%d ibatt=%d fv_uv=%d->%d\n",
 					vtier, vbatt, ibatt,
 					chg_drv->fv_uv, fv_uv);
+#endif
 			}
 
 			/* NOTE: might get here after windup because algo will
@@ -628,9 +658,11 @@ static void chg_work(struct work_struct *work)
 			if (chg_drv->checked_cv_cnt == 0)
 				chg_drv->checked_cv_cnt = 1;
 
+#ifdef CONFIG_GOOGLE_CHARGE_INFO
 			pr_info("MSC_FAST vt=%d vb=%d fv_uv=%d->%d vchrg=%d cv_cnt=%d \n",
 				vtier, vbatt, chg_drv->fv_uv, fv_uv,
 				vchrg, chg_drv->checked_cv_cnt);
+#endif
 
 		} else if (chg_type != POWER_SUPPLY_CHARGE_TYPE_TAPER) {
 		/* Not fast or taper: set checked_cv_cnt=0 to make sure we test
@@ -641,17 +673,21 @@ static void chg_work(struct work_struct *work)
 			update_interval = profile->cv_update_interval;
 			chg_drv->checked_cv_cnt = 0;
 
+#ifdef CONFIG_GOOGLE_CHARGE_INFO
 			pr_info("MSC_TYPE vt=%d vb=%d fv_uv=%d chg_type=%d\n",
 				vtier, vbatt, fv_uv, chg_type);
+#endif
 
 		} else if (chg_drv->checked_cv_cnt + chg_drv->checked_ov_cnt) {
 		/* TAPER_COUNTDOWN: countdown to raise fv_uv and/or check
 		 * for tier switch, will keep steady...
 		 */
+#ifdef CONFIG_GOOGLE_CHARGE_INFO
 			pr_info("MSC_DLY vt=%d vb=%d fv_uv=%d margin=%d cv_cnt=%d, ov_cnt=%d, skip_cnt=%d\n",
 				vtier, vbatt, fv_uv, profile->cv_range_accuracy,
 				chg_drv->checked_cv_cnt,
 				chg_drv->checked_ov_cnt, skip_cnt);
+#endif
 
 			update_interval = profile->cv_update_interval;
 			if (!skip_cnt) {
@@ -666,9 +702,11 @@ static void chg_work(struct work_struct *work)
 		/* TAPER_STEADY: close enough to tier, don't need to adjust */
 			update_interval = profile->cv_update_interval;
 
+#ifdef CONFIG_GOOGLE_CHARGE_INFO
 			pr_info("MSC_STEADY vt=%d vb=%d fv_uv=%d margin=%d\n",
 				vtier, vbatt, fv_uv,
 				profile->cv_range_accuracy);
+#endif
 		} else {
 		/* TAPER_RAISE: under tier vlim, raise one click & debounce
 		 * taper (see above handling of "close enough")
@@ -680,29 +718,37 @@ static void chg_work(struct work_struct *work)
 			/* debounce next taper voltage adjustment */
 			chg_drv->checked_cv_cnt = profile->cv_debounce_cnt;
 
+#ifdef CONFIG_GOOGLE_CHARGE_INFO
 			pr_info("MSC_RAISE vt=%d vb=%d fv_uv=%d->%d\n",
 				vtier, vbatt, chg_drv->fv_uv, fv_uv);
+#endif
 		}
 
 		if (chg_drv->checked_cv_cnt > 0) {
 		/* debounce period on tier switch */
+#ifdef CONFIG_GOOGLE_CHARGE_INFO
 			pr_info("MSC_WAIT vt=%d vb=%d fv_uv=%d ibatt=%d cv_cnt=%d ov_cnt=%d\n",
 				vtier, vbatt, fv_uv, ibatt,
 				chg_drv->checked_cv_cnt,
 				chg_drv->checked_ov_cnt);
+#endif
 		} else if (-ibatt > cc_next_max) {
 		/* current over next tier, reset tier switch count */
 			chg_drv->checked_tier_switch_cnt = 0;
 
+#ifdef CONFIG_GOOGLE_CHARGE_INFO
 			pr_info("MSC_RSTC vt=%d vb=%d fv_uv=%d ibatt=%d cc_next_max=%d t_cnt=%d\n",
 				vtier, vbatt, fv_uv, ibatt, cc_next_max,
 				chg_drv->checked_tier_switch_cnt);
+#endif
 		} else if (chg_drv->checked_tier_switch_cnt >= switch_cnt) {
 		/* next tier, fv_uv detemined at MSC_SET */
 			vbatt_idx = chg_drv->vbatt_idx + 1;
 
+#ifdef CONFIG_GOOGLE_CHARGE_INFO
 			pr_info("MSC_NEXT tier vb=%d ibatt=%d vbatt_idx=%d->%d\n",
 				vbatt, ibatt, chg_drv->vbatt_idx, vbatt_idx);
+#endif
 		} else {
 		/* current under next tier, increase tier switch count */
 			if (!skip_cnt) {
@@ -710,9 +756,11 @@ static void chg_work(struct work_struct *work)
 				chg_drv->last_cnt_time = cur_time;
 			}
 
+#ifdef CONFIG_GOOGLE_CHARGE_INFO
 			pr_info("MSC_NYET ibatt=%d cc_next_max=%d t_cnt=%d, skip_cnt=%d\n",
 				ibatt, cc_next_max,
 				chg_drv->checked_tier_switch_cnt, skip_cnt);
+#endif
 		}
 
 		if (skip_cnt &&
@@ -746,16 +794,20 @@ static void chg_work(struct work_struct *work)
 			if (!skip_cnt) {
 				taper->taper_wa_cnt++;
 				taper->last_taper_wa_cnt_time = curr_time;
+#ifdef CONFIG_GOOGLE_CHARGE_INFO
 				pr_info("MSC_TAPER ibatt=%d, vbat=%d, soc=%d, taper_cnt=%d, chg_status_fast=%d\n",
 					vbatt, ibatt, soc, taper->taper_wa_cnt,
 					chg_status_fast);
+#endif
 			}
 			if (taper->taper_wa_cnt > taper->taper_cnt_target) {
 				vbatt_idx++;
 				taper->taper_wa_cnt = 0;
 				taper->last_taper_wa_cnt_time = 0;
+#ifdef CONFIG_GOOGLE_CHARGE_INFO
 				pr_info("MSC_TAPER next vbatt_idx=%d->%d\n",
 					chg_drv->vbatt_idx, vbatt_idx);
+#endif
 			}
 		} else {
 			taper->taper_wa_cnt = 0;
@@ -779,10 +831,12 @@ static void chg_work(struct work_struct *work)
 			chg_drv->checked_ov_cnt = 0;
 		}
 
+#ifdef CONFIG_GOOGLE_CHARGE_INFO
 		pr_info("MSC_SET cv_cnt=%d ov_cnt=%d temp_idx:%d->%d, vbatt_idx:%d->%d, fv=%d->%d, cc_max=%d\n",
 			chg_drv->checked_cv_cnt, chg_drv->checked_ov_cnt,
 			chg_drv->temp_idx, temp_idx, chg_drv->vbatt_idx,
 			vbatt_idx, chg_drv->fv_uv, fv_uv, cc_max);
+#endif
 
 		/* taper control on last tier with nonzero charge current */
 		if (vbatt_idx == (profile->volt_nb_limits - 1) ||
@@ -816,7 +870,9 @@ static void chg_work(struct work_struct *work)
 		if (soc == chg_drv->charge_stop_level) {
 			chg_drv->is_full = true;
 		} else if (!chg_drv->is_full) {
+#ifdef CONFIG_GOOGLE_CHARGE_INFO
 			pr_info("MSC_RESET: charge full in unexpected soc. reset chg\n");
+#endif
 			reset_chg_drv_state(chg_drv);
 		}
 	} else {
@@ -842,13 +898,17 @@ static void chg_work(struct work_struct *work)
 
 handle_rerun:
 	if (rerun_work) {
+#ifdef CONFIG_GOOGLE_CHARGE_INFO
 		pr_debug("rerun battery charging work in %d ms\n",
 			 update_interval);
+#endif
 		schedule_delayed_work(&chg_drv->chg_work,
 				      msecs_to_jiffies(update_interval));
 	} else {
+#ifdef CONFIG_GOOGLE_CHARGE_INFO
 		pr_info("stop battery charging work: batt_status=%d\n",
 			batt_status);
+#endif
 		reset_chg_drv_state(chg_drv);
 	}
 	goto exit_chg_work;
